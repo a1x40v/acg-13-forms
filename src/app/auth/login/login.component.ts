@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import {
   AbstractControl,
   FormControl,
@@ -6,7 +6,7 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { of } from 'rxjs';
+import { debounceTime, of } from 'rxjs';
 
 function mustContainQuestionMark(control: AbstractControl) {
   if (control.value.includes('?')) {
@@ -26,6 +26,14 @@ function emailIsUnique(control: AbstractControl) {
   });
 }
 
+/*  (1) */
+let initialEmailValue = '';
+const savedForm = window.localStorage.getItem('saved-login-form');
+if (savedForm) {
+  const loadedForm = JSON.parse(savedForm);
+  initialEmailValue = loadedForm.email;
+}
+
 @Component({
   selector: 'app-login',
   standalone: true,
@@ -33,9 +41,11 @@ function emailIsUnique(control: AbstractControl) {
   styleUrl: './login.component.css',
   imports: [ReactiveFormsModule],
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   form = new FormGroup({
-    email: new FormControl('', {
+    email: new FormControl(initialEmailValue, {
       validators: [Validators.required, Validators.email],
       asyncValidators: [emailIsUnique],
     }),
@@ -47,6 +57,23 @@ export class LoginComponent {
       ],
     }),
   });
+
+  ngOnInit(): void {
+    const subscribtion = this.form.valueChanges
+      .pipe(debounceTime(500))
+      .subscribe({
+        next: (value) => {
+          window.localStorage.setItem(
+            'saved-login-form',
+            JSON.stringify({ email: value.email })
+          );
+        },
+      });
+
+    this.destroyRef.onDestroy(() => {
+      subscribtion.unsubscribe();
+    });
+  }
 
   getFieldValidStatus(fieldName: 'email' | 'password'): boolean {
     return (
@@ -62,3 +89,7 @@ export class LoginComponent {
     console.log(enteredEmail, enteredPassword);
   }
 }
+
+/*
+(1) Setup initial email value ouside of the component
+*/
